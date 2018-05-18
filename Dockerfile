@@ -1,6 +1,5 @@
 FROM phusion/baseimage:0.9.19
 
-
 ENV ENVIRONMENT DEV
 ENV LOG_LEVEL INFO
 ENV LANG en_US.UTF-8

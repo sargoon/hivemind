@@ -2,6 +2,7 @@
 
 import json
 import inspect
+from collections import OrderedDict
 
 from hive.db.methods import query_all, query_row
 
@@ -14,12 +15,14 @@ def load_accounts(names):
     rows = query_all(sql, names=tuple(names))
     return [_condenser_account_object(row) for row in rows]
 
-def load_posts(ids, truncate_body=0):
+def load_posts(ids, key=None, truncate_body=0):
     """Given an array of post ids, returns full objects in the same order."""
     if not ids:
         caller = inspect.stack()[1][3]
         print("empty result for %s" % caller)
         return []
+
+    assert key is None or key in ['id', 'ref'], 'invalid `key` specified'
 
     sql = """
     SELECT post_id, author, permlink, title, body, promoted, payout, created_at,
@@ -31,24 +34,37 @@ def load_posts(ids, truncate_body=0):
     """
 
     # key by id so we can return sorted by input order
-    posts_by_id = {}
+    post_map = {}
     for row in query_all(sql, ids=tuple(ids)):
         row = dict(row)
         post = _condenser_post_object(row, truncate_body=truncate_body)
-        posts_by_id[row['post_id']] = post
+        post_map[row['post_id']] = post
 
     # in rare cases of cache inconsistency, recover and warn
-    missed = set(ids) - posts_by_id.keys()
+    missed = set(ids) - post_map.keys()
     if missed:
         print("WARNING: get_posts do not exist in cache: {}".format(missed))
         for _id in missed:
-            sql = ("SELECT id, author, permlink, depth, created_at, is_deleted "
-                   "FROM hive_posts WHERE id = :id")
+            sql = ("SELECT id, author, permlink, depth, created_at, is_deleted"
+                   " FROM hive_posts WHERE id = :id")
             print("missing: {}".format(dict(query_row(sql, id=_id))))
             ids.remove(_id)
 
-    return [posts_by_id[_id] for _id in ids]
+    if key == 'id':
+        tups = [[_id, post_map[_id]] for _id in ids]
+        return OrderedDict(tups)
 
+    elif key == 'ref':
+        out = OrderedDict()
+        for _id in ids:
+            post = post_map[_id]
+            out[_ref(post)] = post
+        return out
+
+    return [post_map[_id] for _id in ids]
+
+def _ref(post):
+    return post['author'] + '/' + post['permlink']
 
 def _condenser_account_object(row):
     """Convert an internal account record into legacy-steemd style."""

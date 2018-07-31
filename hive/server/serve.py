@@ -71,7 +71,7 @@ def run_server(conf):
 
     methods = build_methods()
 
-    #context = dict(db=conf.db())
+    context = dict(db=conf.db())
 
     app = web.Application()
     app['config'] = dict()
@@ -148,7 +148,7 @@ def run_server(conf):
     async def jsonrpc_handler(request):
         """Handles all hive jsonrpc API requests."""
         request = await request.text()
-        response = await methods.dispatch(request)
+        response = await methods.dispatch(request, context=context)
         headers = {'Access-Control-Allow-Origin': '*'}
         return web.json_response(response, status=200, headers=headers)
 

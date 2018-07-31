@@ -1,11 +1,23 @@
 """condenser_api trending tag fetching methods"""
 
 from aiocache import cached
-from hive.db.methods import query_col, query_all
 from hive.server.condenser_api.common import (valid_tag, valid_limit)
 
+def db_context(function):
+    #@wraps(function)
+    def _wrapper(*args, **kwargs):
+        assert 'db' not in kwargs
+        assert 'context' in kwargs
+        assert 'db' in kwargs['context']
+        context = kwargs.pop('context')
+        kwargs['db'] = context['db']
+        return function(*args, **kwargs)
+    return _wrapper
+
+
 @cached(ttl=3600)
-async def get_top_trending_tags_summary():
+@db_context
+async def get_top_trending_tags_summary(db):
     """Get top 50 trending tags among pending posts."""
     # Same results, more overhead:
     #return [tag['name'] for tag in await get_trending_tags('', 50)]
@@ -17,10 +29,11 @@ async def get_top_trending_tags_summary():
       ORDER BY SUM(payout) DESC
          LIMIT 50
     """
-    return query_col(sql)
+    return db.query_col(sql)
 
 @cached(ttl=3600)
-async def get_trending_tags(start_tag: str = '', limit: int = 250):
+@db_context
+async def get_trending_tags(db, start_tag: str = '', limit: int = 250):
     """Get top 250 trending tags among pending posts, with stats."""
 
     limit = valid_limit(limit, ubound=250)
@@ -50,7 +63,7 @@ async def get_trending_tags(start_tag: str = '', limit: int = 250):
     """ % seek
 
     out = []
-    for row in query_all(sql, limit=limit, start_tag=start_tag):
+    for row in db.query_all(sql, limit=limit, start_tag=start_tag):
         out.append({
             'name': row['category'],
             'comments': row['total_posts'] - row['top_posts'],
